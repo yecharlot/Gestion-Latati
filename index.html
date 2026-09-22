@@ -51,11 +51,10 @@ input,textarea,select{width:100%;background:#120a14;border:1px solid var(--line)
   <div class="live" id="livePill"><span id="liveIco"></span> <span>en vivo</span></div>
 </div>
 <div class="wrap">
-  <section id="view-login">
+  <section id="view-login" class="hidden">
     <div class="panel">
-      <h2 style="margin-bottom:.5rem">Acceso gestora</h2>
-      <input id="pin" type="password" placeholder="PIN" autocomplete="current-password"/>
-      <button type="button" class="btn btn-gold" id="btnLogin">Entrar</button>
+      <h1 style="font-size:1.2rem;margin-bottom:.5rem">Abriendo gestión…</h1>
+      <p class="sub" id="loginMsg">Conectando…</p>
     </div>
   </section>
   <section id="view-prods" class="hidden">
@@ -137,8 +136,7 @@ input,textarea,select{width:100%;background:#120a14;border:1px solid var(--line)
       <label class="sub">Eslogan corto (tagline)</label><input id="cfgTagline" placeholder="Tu pedido · tu vale"/>
       <label class="sub">Color principal</label><input id="cfgAccent" type="color" value="#e8b4c8" style="height:42px;padding:0.2rem"/>
       <label class="sub">Color secundario</label><input id="cfgAccent2" type="color" value="#c4789a" style="height:42px;padding:0.2rem"/>
-      <label class="sub">PIN nuevo (opcional)</label><input id="cfgPin" type="password"/>
-      <button type="button" class="btn btn-gold" id="btnCfgSave">Guardar</button>
+<button type="button" class="btn btn-gold" id="btnCfgSave">Guardar</button>
     </div>
     <div class="panel" style="border-color:rgba(232,93,122,.35)">
       <h2 style="color:var(--pink,#e85d7a)">Zona peligrosa</h2>
@@ -217,19 +215,29 @@ function detectTenant(){
   function setBadge(el,n){if(!el)return;el.textContent=String(n);el.classList.toggle('show',n>0)}
   function photo(p){return p&&p.photo?(API+'/photo/'+p.id+'?t='+(p.updated_at||'')):''}
 
-  async function login(){
-    var d=await(await fetch(API+'/gestor/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:$('pin').value})})).json();
-    if(!d.ok){toast('PIN incorrecto');return}
-    token=d.token;localStorage.setItem(TK,token);
-    if(d.profile)applyTheme(d.profile);
-    $('who').textContent=(d.profile&&d.profile.name)||'Gestora';
-    show('prods');loadProds();loadOrders();loadInterests();
+  async function bootSession(){
+    try{
+      var d=await(await fetch(API+'/gestor/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})})).json();
+      if(!d.ok||!d.token){
+        if($('loginMsg'))$('loginMsg').textContent='No se pudo abrir la gestión. Revisa la conexión e intenta de nuevo.';
+        toast((d&&d.error)||'Error de acceso');
+        return false;
+      }
+      token=d.token;localStorage.setItem(TK,token);
+      if(d.profile)applyTheme(d.profile);
+      $('who').textContent=(d.profile&&d.profile.name)||'Gestora';
+      show('prods');loadProds();loadOrders();loadInterests();
+      return true;
+    }catch(e){
+      if($('loginMsg'))$('loginMsg').textContent='Error de red. Desliza hacia abajo o recarga.';
+      toast('Error de red');
+      return false;
+    }
   }
-  $('btnLogin').onclick=login;
 
   async function loadProds(){
     var d=await(await fetch(API+'/gestor/products',{headers:H()})).json();
-    if(!d.ok){token='';localStorage.removeItem(TK);show('login');return}
+    if(!d.ok){token='';localStorage.removeItem(TK);bootSession();return}
     var el=$('list'), list=d.items||[];
     if(!list.length){el.innerHTML='<div class="sub" style="padding:1rem;text-align:center">Sin productos</div>';return}
     el.innerHTML=list.map(function(p){
@@ -506,15 +514,14 @@ function detectTenant(){
   }
   $('btnCfgSave').onclick=async function(){
     var body={name:$('cfgName').value.trim(),whatsapp:$('cfgWa').value.trim(),address:$('cfgAddr').value.trim(),bio:$('cfgBio').value.trim(),tagline:($('cfgTagline')&&$('cfgTagline').value.trim())||'',accent:($('cfgAccent')&&$('cfgAccent').value)||'',accent2:($('cfgAccent2')&&$('cfgAccent2').value)||''};
-    if($('cfgPin').value.trim())body.pin=$('cfgPin').value.trim();
-    var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:JSON.stringify(body)})).json();
+var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:JSON.stringify(body)})).json();
     if(!d.ok){toast(d.error||'Error');return}
     toast('Perfil guardado');$('who').textContent=body.name||'Gestora';
   };
 
   document.querySelectorAll('.nav button').forEach(function(b){
     b.onclick=function(){
-      if(!authed()){show('login');return}
+      if(!authed()){bootSession();return}
       var v=b.getAttribute('data-v');show(v);
       if(v==='prods')loadProds();
       if(v==='orders')loadOrders();
@@ -639,8 +646,9 @@ function detectTenant(){
     btn.addEventListener('pointerup',function(){if(Date.now()-t>700){localStorage.setItem('latati_pwa_dismiss','1');btn.classList.add('hidden-forced');toast('Botón oculto')}});
   })();
 
-  if(token){show('prods');loadProds();loadOrders();loadInterests()}
-  else show('login');
+  // Sin PIN: la URL de gestión es el acceso. Siempre pide sesión al edge.
+  show('login');
+  bootSession();
   setInterval(function(){
     if(!token)return;
     if(!$('view-prods').classList.contains('hidden'))loadProds();
