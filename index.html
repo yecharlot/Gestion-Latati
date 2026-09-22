@@ -221,7 +221,8 @@ function detectTenant(){
 
   async function tryLogin(base){
     var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
-    var t = ctrl ? setTimeout(function(){ try{ctrl.abort()}catch(e){} }, 25000) : null;
+    var ms = (base.indexOf('onrender.com')>=0) ? 70000 : 20000;
+    var t = ctrl ? setTimeout(function(){ try{ctrl.abort()}catch(e){} }, ms) : null;
     try{
       var res = await fetch(base+'/gestor/login',{
         method:'POST',
