@@ -208,6 +208,9 @@ function detectTenant(){
   function $(id){return document.getElementById(id)}
   function toast(m){var t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2600)}
   function H(j){var h={};if(j)h['Content-Type']='application/json';if(token)h['X-LaTati-Token']=token;return h}
+  function money(n){var x=Number(n);if(!isFinite(x))x=0;return x.toFixed(2)}
+  function orderTotal(o){if(!o)return 0;var t=Number(o.total);if(isFinite(t)&&o.total!=null&&o.total!=='')return t;var s=0;(o.items||[]).forEach(function(l){s+=(Number(l.price)||0)*(Number(l.qty)||1)});return s}
+  function orderCurrency(o){return (o&&(o.currency||(o.items&&o.items[0]&&o.items[0].currency)))||'CUP'}
   function esc(s){return String(s||'').replace(/</g,'&lt;')}
   function hide(){['login','prods','edit','orders','interest','chat','cfg'].forEach(function(v){$('view-'+v).classList.add('hidden')})}
   function show(v){
@@ -405,7 +408,7 @@ function detectTenant(){
       return '<div class="panel"><strong>'+esc(o.code)+'</strong> <span class="badge">'+esc(stLabel(st))+'</span>'+
         '<div class="sub">'+esc(o.client_name)+' · '+esc(o.client_phone)+'</div>'+
         '<div class="sub">'+(o.delivery_type==='delivery'?('Domicilio: '+esc(o.delivery_address||'—')):('Recogida'+(o.address?' · '+esc(o.address):'')))+'</div>'+
-        '<div class="price">'+(o.currency||'')+' '+Number(o.total).toFixed(2)+'</div>'+
+        '<div class="price">'+(o.currency||'')+' '+money(orderTotal(o))+'</div>'+
         '<div class="sub">'+(o.lines||[]).map(function(l){return l.qty+'× '+l.title}).join(', ')+'</div>'+actions+'</div>';
     }).join('');
         el.querySelectorAll('.st').forEach(function(b){b.onclick=async function(){
@@ -705,7 +708,7 @@ var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:J
     // Si está en la lista, solo actualizar la lista (sin reabrir chats).
     if(inThreadView())openTh(activeTh);
     else if(inChatView())loadThreads();
-  },5000);
+  },3000);
 })();
 </script>
 </body>
