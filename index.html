@@ -624,15 +624,13 @@ var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:J
       }
       var es=new EventSource(API+'/events');
       es.addEventListener('latati_hello',function(){if(token){loadProds();loadOrders();loadInterests()}});
+      es.addEventListener('hello',function(){if(token){loadProds();loadOrders();loadInterests()}});
       es.addEventListener('latati_catalog',onCat);
       es.addEventListener('latati_order',onOrderEvent);
       es.addEventListener('latati_interest',onInterestEvent);
       es.addEventListener('latati_chat',handleChatEvent);
-      var es2=new EventSource('/api/pulse');
-      es2.addEventListener('latati_order',onOrderEvent);
-      es2.addEventListener('latati_interest',onInterestEvent);
-      es2.addEventListener('latati_catalog',onCat);
-      es2.addEventListener('latati_chat',handleChatEvent);
+      var es2=null; // pulse del nodo Render no aplica en GitHub Pages
+      if(es2){es2.addEventListener('latati_order',onOrderEvent);es2.addEventListener('latati_interest',onInterestEvent);es2.addEventListener('latati_catalog',onCat);es2.addEventListener('latati_chat',handleChatEvent);}
     }catch(e){}
   }
   $('liveIco').innerHTML=ico('live');
