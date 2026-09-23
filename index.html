@@ -390,7 +390,7 @@ function detectTenant(){
     if(!list.length){el.innerHTML='<div class="sub" style="text-align:center;padding:1rem">Sin pedidos</div>';return}
     list=list.slice().sort(function(a,b){
       var wa=a.status==='requested'?0:1,wb=b.status==='requested'?0:1;
-      if(wa!==wb)return wa-wb;return (b.ts||'').localeCompare(a.ts||'');
+      if(wa!==wb)return wa-wb;return (b.ts||b.created_at||'').localeCompare(a.ts||a.created_at||'');
     });
     el.innerHTML=list.map(function(o){
       var st=(o.status||'').toLowerCase(),actions='';
@@ -409,7 +409,7 @@ function detectTenant(){
         '<div class="sub">'+esc(o.client_name)+' · '+esc(o.client_phone)+'</div>'+
         '<div class="sub">'+(o.delivery_type==='delivery'?('Domicilio: '+esc(o.delivery_address||'—')):('Recogida'+(o.address?' · '+esc(o.address):'')))+'</div>'+
         '<div class="price">'+(o.currency||'')+' '+money(orderTotal(o))+'</div>'+
-        '<div class="sub">'+(o.lines||[]).map(function(l){return l.qty+'× '+l.title}).join(', ')+'</div>'+actions+'</div>';
+        '<div class="sub">'+(o.lines||o.items||[]).map(function(l){return l.qty+'× '+l.title}).join(', ')+'</div>'+actions+'</div>';
     }).join('');
         el.querySelectorAll('.st').forEach(function(b){b.onclick=async function(){
       var s=b.getAttribute('data-s');
@@ -699,16 +699,32 @@ var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:J
   // Sin PIN: la URL de gestión es el acceso. Siempre pide sesión al edge.
   show('login');
   bootSession();
+  var _lastOrderSig='';
   setInterval(function(){
     if(!token)return;
     if(!$('view-prods').classList.contains('hidden'))loadProds();
     loadOrders();
     loadInterests();
-    // Chat: solo refrescar el hilo si el usuario está DENTRO de él.
-    // Si está en la lista, solo actualizar la lista (sin reabrir chats).
     if(inThreadView())openTh(activeTh);
     else if(inChatView())loadThreads();
-  },3000);
+  },2500);
+  // Extra: poll pedidos cada 2s y forzar UI si cambia la firma
+  setInterval(async function(){
+    if(!token)return;
+    try{
+      var d=await(await fetch(API+'/orders',{headers:H(),cache:'no-store'})).json();
+      if(!d||!d.ok)return;
+      var list=d.items||[];
+      var sig=list.map(function(o){return (o.id||o.code)+':'+(o.status||'')+':'+(o.ts||o.updated_at||'')}).join('|')+'#'+(d.pending_count||0);
+      if(sig!==_lastOrderSig){
+        _lastOrderSig=sig;
+        loadOrders();
+        if((d.pending_count||0)>0 && $('view-orders').classList.contains('hidden')){
+          setBadge($('badgeOrders'), d.pending_count);
+        }
+      }
+    }catch(e){}
+  },2000);
 })();
 </script>
 </body>
