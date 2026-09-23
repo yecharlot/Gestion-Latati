@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <base href="./"/>
-<script>window.LATATI_EDGE_API="https://latati-edge.lhmolam-877.workers.dev/api/latati";window.LATATI_API_CANDIDATES=["https://latati-edge.lhmolam-877.workers.dev/api/latati","https://prisma-tec.onrender.com/api/latati"];</script>
+<script>window.LATATI_EDGE_API="https://prisma-tec.onrender.com/api/latati";window.LATATI_API_CANDIDATES=["https://prisma-tec.onrender.com/api/latati","https://latati-edge.lhmolam-877.workers.dev/api/latati"];</script>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>La Tati · Gestión</title>
 <style>
@@ -170,11 +170,12 @@ input,textarea,select{width:100%;background:#120a14;border:1px solid var(--line)
   }
 
 (function(){
-  window.LATATI_EDGE_API = "https://latati-edge.lhmolam-877.workers.dev/api/latati";
+  window.LATATI_EDGE_API = window.LATATI_EDGE_API || "https://prisma-tec.onrender.com/api/latati";
   window.LATATI_API_CANDIDATES = window.LATATI_API_CANDIDATES || [
-    "https://latati-edge.lhmolam-877.workers.dev/api/latati",
-    "https://prisma-tec.onrender.com/api/latati"
+    "https://prisma-tec.onrender.com/api/latati",
+    "https://latati-edge.lhmolam-877.workers.dev/api/latati"
   ];
+  // Prefer last working, but never put unreachable .dev first on mobile
   var API = window.LATATI_EDGE_API;
 function detectTenant(){
     var q=new URLSearchParams(location.search).get('t');
@@ -251,10 +252,17 @@ function detectTenant(){
   async function bootSession(){
     var msg = $('loginMsg');
     var bases = (window.LATATI_API_CANDIDATES || [API]).slice();
-    // prefer last working
+    // Render primero (móviles con problemas en *.workers.dev); luego edge
+    bases.sort(function(a,b){
+      var ar=a.indexOf('onrender.com')>=0?0:1, br=b.indexOf('onrender.com')>=0?0:1;
+      return ar-br;
+    });
     try{
       var last = localStorage.getItem('latati_api_base');
-      if(last){ bases = [last].concat(bases.filter(function(b){return b!==last})) }
+      // solo preferir last si es onrender o si no hay onrender en lista
+      if(last && last.indexOf('onrender.com')>=0){
+        bases = [last].concat(bases.filter(function(b){return b!==last}));
+      }
     }catch(e){}
     var lastErr = null;
     for(var i=0;i<bases.length;i++){
