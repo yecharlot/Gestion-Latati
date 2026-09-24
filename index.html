@@ -218,7 +218,39 @@ function detectTenant(){
   }
   function authed(){return !!token}
   function setBadge(el,n){if(!el)return;el.textContent=String(n);el.classList.toggle('show',n>0)}
-  function photo(p){return p&&p.photo?(API+'/photo/'+p.id+'?t='+(p.updated_at||'')):''}
+  function photo(p){return p&&p.photo?(API+'/photo/'+p.id+'?t='+(p.updated_at||'')+'&w=400'):''}
+
+  function compressImageFile(file, maxSide, quality){
+    maxSide = maxSide || 1280;
+    quality = quality || 0.72;
+    return new Promise(function(resolve){
+      if(!file || !file.type || file.type.indexOf('image')!==0){ resolve(file); return; }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function(){
+        try{
+          var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+          var scale = 1;
+          if(w > maxSide || h > maxSide) scale = maxSide / Math.max(w, h);
+          var cw = Math.max(1, Math.round(w * scale));
+          var ch = Math.max(1, Math.round(h * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = cw; canvas.height = ch;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, cw, ch);
+          canvas.toBlob(function(blob){
+            URL.revokeObjectURL(url);
+            if(!blob){ resolve(file); return; }
+            var name = (file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+            resolve(new File([blob], name, { type: 'image/jpeg' }));
+          }, 'image/jpeg', quality);
+        }catch(e){ URL.revokeObjectURL(url); resolve(file); }
+      };
+      img.onerror = function(){ URL.revokeObjectURL(url); resolve(file); };
+      img.src = url;
+    });
+  }
+
 
   async function tryLogin(base){
     var ctrl = typeof AbortController!=='undefined' ? new AbortController() : null;
@@ -350,9 +382,15 @@ function detectTenant(){
     else{$('fCatNew').classList.add('hidden');$('fCatNew').value=''}
   };
   $('btnCancelEdit').onclick=function(){show('prods');loadProds()};
-  $('fPhoto').onchange=function(e){
+  $('fPhoto').onchange=async function(e){
     var f=e.target.files&&e.target.files[0];if(!f)return;
-    editingPhoto=f;var r=new FileReader();r.onload=function(){$('fPreview').src=r.result;$('fPreview').classList.remove('hidden')};r.readAsDataURL(f);
+    toast('Optimizando foto…');
+    try{ f = await compressImageFile(f, 1280, 0.72); }catch(err){}
+    editingPhoto=f;
+    var r=new FileReader();
+    r.onload=function(){$('fPreview').src=r.result;$('fPreview').classList.remove('hidden')};
+    r.readAsDataURL(f);
+    toast('Foto lista');
   };
   $('btnSave').onclick=async function(){
     var priceVal=$('fPrice').value.trim();
@@ -411,21 +449,27 @@ function detectTenant(){
       }
       var lines = o.lines || o.items || [];
       var linesHtml = lines.map(function(l){
-        return '<div class="sub" style="margin-top:.2rem">'+esc(String(l.qty||1))+'× '+esc(l.title||l.product_id||'')+
-          ' · '+(l.currency||o.currency||'CUP')+' '+money(l.price)+'</div>';
+        var pid = l.product_id || l.id || '';
+        var img = (l.photo || pid) ? (API+'/photo/'+pid+'?t=1&w=120') : '';
+        // si el API marca photo:false explícito, no forzar
+        if(l.photo===false) img='';
+        return '<div class="row" style="margin-top:.4rem;align-items:center;gap:.55rem">'+
+          (img?'<img class="thumb" src="'+img+'" alt="" loading="lazy" decoding="async" onerror="this.style.display=\'none\'">':'')+
+          '<div style="flex:1"><strong>'+esc(l.title||pid||'Producto')+'</strong>'+
+          '<div class="sub">'+esc(String(l.qty||1))+' ud · '+(l.currency||o.currency||'CUP')+' '+money(l.price)+'</div></div></div>';
       }).join('');
       var delHtml = '';
       if((o.delivery_type||'')==='delivery'){
         delHtml = '<div class="sub" style="margin-top:.45rem;padding:.5rem;border:1px solid var(--line);border-radius:10px;background:rgba(255,200,90,.06)">'+
           '<strong style="color:var(--gold)">🚚 Entrega a domicilio</strong><br>'+
           '<strong>Dirección:</strong> '+esc(o.delivery_address||o.address||'—')+
-          (o.delivery_note?('<br><strong>Detalles entrega:</strong> '+esc(o.delivery_note)):'')+
+          (o.preferred_time?('<br><strong>Hora aprox.:</strong> '+esc(o.preferred_time)):'')+(o.delivery_note?('<br><strong>Detalles entrega:</strong> '+esc(o.delivery_note)):'')+
           (o.note && o.note!==o.delivery_note?('<br><strong>Nota del cliente:</strong> '+esc(o.note)):'')+
           '</div>';
       } else {
         delHtml = '<div class="sub" style="margin-top:.35rem"><strong>Recogida en punto</strong>'+
           (o.address||o.pickup_address?(' · '+esc(o.address||o.pickup_address)):'')+
-          (o.note?('<br><strong>Nota:</strong> '+esc(o.note)):'')+
+          (o.preferred_time?('<br><strong>Hora aprox. recogida:</strong> '+esc(o.preferred_time)):'')+(o.note?('<br><strong>Nota:</strong> '+esc(o.note)):'')+
           '</div>';
       }
       return '<div class="panel"><strong>'+esc(o.code)+'</strong> <span class="badge">'+esc(stLabel(st))+'</span>'+
