@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <base href="./"/>
-<script>window.LATATI_EDGE_API="https://prisma-tec.onrender.com/api/latati";window.LATATI_API_CANDIDATES=["https://prisma-tec.onrender.com/api/latati","https://latati-edge.lhmolam-877.workers.dev/api/latati"];</script>
+<script>window.LATATI_EDGE_API="https://prisma-tec.onrender.com/api/latati";window.LATATI_API_CANDIDATES=["https://prisma-tec.onrender.com/api/latati"];</script>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <title>La Tati · Gestión</title>
 <style>
@@ -170,11 +170,8 @@ input,textarea,select{width:100%;background:#120a14;border:1px solid var(--line)
   }
 
 (function(){
-  window.LATATI_EDGE_API = window.LATATI_EDGE_API || "https://prisma-tec.onrender.com/api/latati";
-  window.LATATI_API_CANDIDATES = window.LATATI_API_CANDIDATES || [
-    "https://prisma-tec.onrender.com/api/latati",
-    "https://latati-edge.lhmolam-877.workers.dev/api/latati"
-  ];
+  window.LATATI_EDGE_API = "https://prisma-tec.onrender.com/api/latati";
+  window.LATATI_API_CANDIDATES = ["https://prisma-tec.onrender.com/api/latati"];
   // Prefer last working, but never put unreachable .dev first on mobile
   var API = window.LATATI_EDGE_API;
 function detectTenant(){
@@ -251,19 +248,13 @@ function detectTenant(){
 
   async function bootSession(){
     var msg = $('loginMsg');
-    var bases = (window.LATATI_API_CANDIDATES || [API]).slice();
-    // Render primero (móviles con problemas en *.workers.dev); luego edge
-    bases.sort(function(a,b){
-      var ar=a.indexOf('onrender.com')>=0?0:1, br=b.indexOf('onrender.com')>=0?0:1;
-      return ar-br;
-    });
     try{
-      var last = localStorage.getItem('latati_api_base');
-      // solo preferir last si es onrender o si no hay onrender en lista
-      if(last && last.indexOf('onrender.com')>=0){
-        bases = [last].concat(bases.filter(function(b){return b!==last}));
-      }
+      var last = localStorage.getItem('latati_api_base') || '';
+      if(last.indexOf('workers.dev') >= 0) localStorage.removeItem('latati_api_base');
     }catch(e){}
+    var bases = ["https://prisma-tec.onrender.com/api/latati"];
+    API = "https://prisma-tec.onrender.com/api/latati";
+    window.LATATI_EDGE_API = API;
     var lastErr = null;
     for(var i=0;i<bases.length;i++){
       var base = bases[i];
@@ -277,7 +268,7 @@ function detectTenant(){
           try{ localStorage.setItem('latati_api_base', base) }catch(e){}
           token = d.token; localStorage.setItem(TK, token);
           if(d.profile) applyTheme(d.profile);
-          $('who').textContent = (d.profile&&d.profile.name)||'Gestora';
+          $('who').textContent = ((d.profile&&d.profile.name)||'Gestora')+' · prisma-tec';
           show('prods'); loadProds(); loadOrders(); loadInterests();
           return true;
         }catch(e){
@@ -384,8 +375,13 @@ function detectTenant(){
     return ({requested:'Por confirmar',pending:'Confirmado · preparando',ready:'Listo para entrega/recogida',delivered:'Entregado',cancelled:'Cancelado'})[s]||s||'—';
   }
   async function loadOrders(){
-    var d=await(await fetch(API+'/orders',{headers:H()})).json();
-    if(!d.ok)return;
+    var d;
+    try{
+      API = 'https://prisma-tec.onrender.com/api/latati';
+      var res = await fetch(API+'/orders',{headers:H(),cache:'no-store'});
+      d = await res.json();
+    }catch(e){ toast('Error red pedidos'); return; }
+    if(!d||!d.ok){ if(d&&d.error==='auth'){ token=''; localStorage.removeItem(TK); bootSession(); } return; }
     pendingOrders=d.pending_count||0;
     setBadge($('badgeOrders'), pendingOrders);
     if(typeof d.interest_count==='number'){pendingInt=d.interest_count;setBadge($('badgeInt'),pendingInt)}
