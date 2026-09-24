@@ -409,11 +409,31 @@ function detectTenant(){
       } else if(st==='cancelled'||st==='delivered'){
         actions='<div class="btn-row"><button type="button" class="btn btn-ghost del" data-id="'+esc(o.id||o.code)+'">Eliminar de la lista</button></div>';
       }
+      var lines = o.lines || o.items || [];
+      var linesHtml = lines.map(function(l){
+        return '<div class="sub" style="margin-top:.2rem">'+esc(String(l.qty||1))+'× '+esc(l.title||l.product_id||'')+
+          ' · '+(l.currency||o.currency||'CUP')+' '+money(l.price)+'</div>';
+      }).join('');
+      var delHtml = '';
+      if((o.delivery_type||'')==='delivery'){
+        delHtml = '<div class="sub" style="margin-top:.45rem;padding:.5rem;border:1px solid var(--line);border-radius:10px;background:rgba(255,200,90,.06)">'+
+          '<strong style="color:var(--gold)">🚚 Entrega a domicilio</strong><br>'+
+          '<strong>Dirección:</strong> '+esc(o.delivery_address||o.address||'—')+
+          (o.delivery_note?('<br><strong>Detalles entrega:</strong> '+esc(o.delivery_note)):'')+
+          (o.note && o.note!==o.delivery_note?('<br><strong>Nota del cliente:</strong> '+esc(o.note)):'')+
+          '</div>';
+      } else {
+        delHtml = '<div class="sub" style="margin-top:.35rem"><strong>Recogida en punto</strong>'+
+          (o.address||o.pickup_address?(' · '+esc(o.address||o.pickup_address)):'')+
+          (o.note?('<br><strong>Nota:</strong> '+esc(o.note)):'')+
+          '</div>';
+      }
       return '<div class="panel"><strong>'+esc(o.code)+'</strong> <span class="badge">'+esc(stLabel(st))+'</span>'+
-        '<div class="sub">'+esc(o.client_name)+' · '+esc(o.client_phone)+'</div>'+
-        '<div class="sub">'+(o.delivery_type==='delivery'?('Domicilio: '+esc(o.delivery_address||'—')):('Recogida'+(o.address?' · '+esc(o.address):'')))+'</div>'+
-        '<div class="price">'+(o.currency||'')+' '+money(orderTotal(o))+'</div>'+
-        '<div class="sub">'+(o.lines||o.items||[]).map(function(l){return l.qty+'× '+l.title}).join(', ')+'</div>'+actions+'</div>';
+        '<div class="sub" style="margin-top:.35rem"><strong>Cliente:</strong> '+esc(o.client_name||'—')+' · '+esc(o.client_phone||'—')+'</div>'+
+        delHtml+
+        '<div style="margin-top:.45rem"><strong class="sub">Productos</strong>'+linesHtml+'</div>'+
+        '<div class="price" style="margin-top:.4rem">Total · '+(o.currency||'CUP')+' '+money(orderTotal(o))+'</div>'+
+        actions+'</div>';
     }).join('');
         el.querySelectorAll('.st').forEach(function(b){b.onclick=async function(){
       var s=b.getAttribute('data-s');
@@ -629,7 +649,20 @@ var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:J
         // En otra vista: solo avisar (badge + toast)
         notifyChat('Nuevo mensaje en chat');
       }
-      var es=new EventSource(API+'/events');
+      var es=null;
+      function connectSSE(){
+        try{ if(es) es.close(); }catch(e){}
+        es=new EventSource(API+'/events');
+        es.addEventListener('latati_hello',function(){if(token){loadProds();loadOrders();loadInterests()}});
+        es.addEventListener('hello',function(){if(token){loadProds();loadOrders();loadInterests()}});
+        es.addEventListener('latati_order',onOrderEvent);
+        es.addEventListener('latati_interest',onInterestEvent);
+        es.addEventListener('latati_catalog',onCat);
+        es.addEventListener('latati_chat',handleChatEvent);
+        es.onerror=function(){ try{es.close()}catch(e){}; setTimeout(connectSSE, 8000); };
+      }
+      connectSSE();
+      /* legacy single es removed below */
       es.addEventListener('latati_hello',function(){if(token){loadProds();loadOrders();loadInterests()}});
       es.addEventListener('hello',function(){if(token){loadProds();loadOrders();loadInterests()}});
       es.addEventListener('latati_catalog',onCat);
@@ -704,18 +737,14 @@ var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:J
   show('login');
   bootSession();
   var _lastOrderSig='';
-  setInterval(function(){
-    if(!token)return;
-    if(!$('view-prods').classList.contains('hidden'))loadProds();
-    loadOrders();
-    loadInterests();
-    if(inThreadView())openTh(activeTh);
-    else if(inChatView())loadThreads();
-  },2500);
-  // Extra: poll pedidos cada 2s y forzar UI si cambia la firma
+  // Un solo poll moderado (8–15s) + SSE; evita saturar Render free
   setInterval(async function(){
     if(!token)return;
     try{
+      if(!$('view-prods').classList.contains('hidden')) loadProds();
+      if(!$('view-interest').classList.contains('hidden')) loadInterests();
+      if(inThreadView()) openTh(activeTh);
+      else if(inChatView()) loadThreads();
       var d=await(await fetch(API+'/orders',{headers:H(),cache:'no-store'})).json();
       if(!d||!d.ok)return;
       var list=d.items||[];
@@ -726,9 +755,12 @@ var d=await(await fetch(API+'/gestor/profile',{method:'POST',headers:H(1),body:J
         if((d.pending_count||0)>0 && $('view-orders').classList.contains('hidden')){
           setBadge($('badgeOrders'), d.pending_count);
         }
+      } else if(!$('view-orders').classList.contains('hidden')){
+        // en vista pedidos refrescar UI de todos modos cada ciclo lento
+        loadOrders();
       }
     }catch(e){}
-  },2000);
+  },12000);
 })();
 </script>
 </body>
